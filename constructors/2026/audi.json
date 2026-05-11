@@ -1,0 +1,16 @@
+[
+  {
+    "driverId": "bor",
+    "permanentNumber": "5",
+    "code": "BOR",
+    "givenName": "Gabriel",
+    "familyName": "Bortoleto"
+  },
+  {
+    "driverId": "hul",
+    "permanentNumber": "27",
+    "code": "HUL",
+    "givenName": "Nico",
+    "familyName": "Hülkenberg"
+  }
+]

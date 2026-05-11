@@ -1,0 +1,16 @@
+[
+  {
+    "driverId": "nor",
+    "permanentNumber": "1",
+    "code": "NOR",
+    "givenName": "Lando",
+    "familyName": "Norris"
+  },
+  {
+    "driverId": "pia",
+    "permanentNumber": "81",
+    "code": "PIA",
+    "givenName": "Oscar",
+    "familyName": "Piastri"
+  }
+]

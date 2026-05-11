@@ -1,0 +1,16 @@
+[
+  {
+    "driverId": "gas",
+    "permanentNumber": "10",
+    "code": "GAS",
+    "givenName": "Pierre",
+    "familyName": "Gasly"
+  },
+  {
+    "driverId": "col",
+    "permanentNumber": "43",
+    "code": "COL",
+    "givenName": "Franco",
+    "familyName": "Colapinto"
+  }
+]
