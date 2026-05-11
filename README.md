@@ -284,7 +284,6 @@ GET /colors/drivers.json
 ```
 f1-telemetry-api/
 ├── .github/workflows/
-│   ├── actions.yaml        # Scheduled data update (weekly, Mondays 10:00 UTC)
 │   └── static.yml          # GitHub Pages deployment
 ├── colors/
 │   ├── drivers.json        # Team colors indexed by driver ID
@@ -322,18 +321,14 @@ f1-telemetry-api/
 
 ---
 
-## 🔄 Automated Updates
+## 🔄 Updating Data
 
-Data is automatically refreshed via a **GitHub Actions** workflow:
+Data is updated **manually** by running `api_update.py` locally. There is no automated schedule — you have full control over when data is refreshed.
 
-- **Schedule:** Every Monday at 10:00 AM UTC
-- **Trigger:** Can also be run manually via `workflow_dispatch`
-- **Process:**
-  1. Fetches latest race results, qualifying, sprint, and standings data
-  2. Updates individual driver statistics with new race data
-  3. Performs statistical analysis (consistency, peak seasons, rates)
-  4. Commits and pushes updated JSON files
-  5. GitHub Pages automatically redeploys
+**Process:**
+1. Run the desired update functions in `api_update.py` (see [Local Development](#-local-development))
+2. Commit and push the updated JSON files
+3. GitHub Pages automatically redeploys via the `static.yml` workflow
 
 ---
 
