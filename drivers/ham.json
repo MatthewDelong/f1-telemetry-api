@@ -2,21 +2,21 @@
   "driverId": "ham",
   "driverCode": "HAM",
   "driverNumber": "",
-  "lastUpdate": "2026-05-08T11:30:11.482Z",
+  "lastUpdate": "2026-06-06T12:21:46.712Z",
   "totalWins": 0,
-  "totalPodiums": 1,
+  "totalPodiums": 2,
   "totalPoles": 0,
   "totalDNFs": 0,
-  "totalRaces": 4,
+  "totalRaces": 5,
   "winRate": 0,
-  "podiumRate": 0.25,
+  "podiumRate": 0.4,
   "poleRate": 0,
   "dnfRate": 0,
   "seasonWins": {
     "2026": 0
   },
   "seasonPodiums": {
-    "2026": 1
+    "2026": 2
   },
   "seasonPoles": {
     "2026": 0
@@ -29,7 +29,8 @@
   },
   "podiums": {
     "2026": {
-      "Chinese Grand Prix": "3"
+      "Chinese Grand Prix": "3",
+      "Canadian Grand Prix": "2"
     }
   },
   "DNFs": {
@@ -37,17 +38,18 @@
   },
   "fastLaps": {
     "2026": {
-      "Australian Grand Prix": -1,
-      "Chinese Grand Prix": "1:36.123",
-      "Japanese Grand Prix": -1,
-      "Miami Grand Prix": -1
+      "Australian Grand Prix": "1:22.423",
+      "Chinese Grand Prix": "1:36.092",
+      "Japanese Grand Prix": "1:32.777",
+      "Miami Grand Prix": "1:32.676",
+      "Canadian Grand Prix": "1:14.573"
     }
   },
   "finalStandings": {
     "2026": {
       "year": "2026",
       "position": "0",
-      "points": "51"
+      "points": "61"
     }
   },
   "posAfterRace": {
@@ -64,7 +66,10 @@
           "points": 35
         },
         "Miami Grand Prix": {
-          "points": 51
+          "points": 43
+        },
+        "Canadian Grand Prix": {
+          "points": 61
         }
       }
     }
@@ -75,7 +80,8 @@
         "Australian Grand Prix": "4",
         "Chinese Grand Prix": "3",
         "Japanese Grand Prix": "6",
-        "Miami Grand Prix": "6"
+        "Miami Grand Prix": "6",
+        "Canadian Grand Prix": "2"
       }
     }
   },
@@ -85,7 +91,8 @@
         "Australian Grand Prix": "7",
         "Chinese Grand Prix": "3",
         "Japanese Grand Prix": "6",
-        "Miami Grand Prix": "6"
+        "Miami Grand Prix": "6",
+        "Canadian Grand Prix": "5"
       }
     }
   },
@@ -95,7 +102,8 @@
         "Australian Grand Prix": "3",
         "Chinese Grand Prix": "0",
         "Japanese Grand Prix": "0",
-        "Miami Grand Prix": "0"
+        "Miami Grand Prix": "0",
+        "Canadian Grand Prix": "3"
       }
     }
   },
@@ -118,25 +126,30 @@
           "1:29.567"
         ],
         "Miami Grand Prix": [
-          "1:28.712",
-          "1:28.415",
-          "1:28.312"
+          "1:29.483",
+          "1:28.477",
+          "1:28.319"
+        ],
+        "Canadian Grand Prix": [
+          "1:13.767",
+          "1:13.041",
+          "1:12.868"
         ]
       }
     }
   },
   "avgRacePositions": {
-    "2026": "4.75"
+    "2026": "4.20"
   },
   "avgQualiPositions": {
-    "2026": "5.50"
+    "2026": "5.40"
   },
   "rates": {
     "wins": {
       "2026": "0.0000"
     },
     "podiums": {
-      "2026": "0.2500"
+      "2026": "0.4000"
     },
     "poles": {
       "2026": "0.0000"
