@@ -6,6 +6,17 @@ api_url = 'https://api.jolpi.ca/ergast/f1'
 # api_url = 'http://ergast.com/api/f1'
 current_year = datetime.date.today().year
 
+def safe_get(url, timeout=10, **kwargs):
+    try:
+        return requests.get(url, timeout=timeout, **kwargs)
+    except requests.exceptions.RequestException as e:
+        print(f"API Request failed: {e}")
+        class DummyResponse:
+            status_code = 500
+            headers = {}
+            def json(self): return {}
+        return DummyResponse()
+
 class NpEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, np.integer):
@@ -18,7 +29,7 @@ class NpEncoder(json.JSONEncoder):
 
 def update_constructors():
     season = current_year
-    response = requests.get(f'{api_url}/{season}/constructors.json')
+    response = safe_get(f'{api_url}/{season}/constructors.json')
     if response.status_code==200:
         responsedata = response.json()
         constructors = responsedata["MRData"]["ConstructorTable"]["Constructors"]
@@ -30,6 +41,7 @@ def update_constructors():
         #     "nationality": "American"
         # }
         # constructors.append(apx)
+        os.makedirs('constructors', exist_ok=True)
         with open(f'constructors/{season}.json', 'w', encoding='utf-8') as file:
             json.dump(constructors, file, ensure_ascii=False, indent=4)
         print("Constructors updated successfully!")
@@ -44,7 +56,7 @@ def update_constructor_drivers():
 
     def fetchDrivers(team):
         print(team)
-        response = requests.get(f'{api_url}/{season}/constructors/{team}/drivers.json')
+        response = safe_get(f'{api_url}/{season}/constructors/{team}/drivers.json')
         if response.status_code == 200:
             responsedata = response.json()
             drivers = responsedata["MRData"]["DriverTable"]["Drivers"]
@@ -71,111 +83,149 @@ def update_driverData():
     import json
     import requests
 
-    url1 = f'{api_url}/current/last/results.json'
-
-    response1 = requests.get(url1)
-
     input_directory = 'drivers/'
     output_directory = 'drivers2/'
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
 
-    if response1.status_code == 200:
-        responsedata1 = response1.json()
-        race = responsedata1["MRData"]["RaceTable"]["Races"][0]
+    # 1. Fetch all races results
+    try:
+        with open('results.json', 'r', encoding='utf-8') as f:
+            races = json.load(f)
+    except Exception:
+        url_results = f'{api_url}/current/results.json?limit=1000'
+        resp_results = safe_get(url_results)
+        if resp_results.status_code != 200:
+            print("Failed to fetch results")
+            return
+        races = resp_results.json()["MRData"]["RaceTable"]["Races"]
+
+    # 2. Fetch all qualifying results
+    try:
+        with open('qualifying.json', 'r', encoding='utf-8') as f:
+            quali_races = json.load(f)
+    except Exception:
+        url_quali = f'{api_url}/current/qualifying.json?limit=1000'
+        resp_quali = safe_get(url_quali)
+        quali_races = []
+        if resp_quali.status_code == 200:
+            quali_races = resp_quali.json()["MRData"]["RaceTable"]["Races"]
+
+    # 3. Fetch driver standings
+    try:
+        with open(f'races/{current_year}/driverStandings.json', 'r', encoding='utf-8') as f:
+            standings_data = json.load(f)
+            # Find the latest round in the driver standings
+            latest_round_data = standings_data[str(len(standings_data))]
+            standings_list = latest_round_data
+    except Exception:
+        url_standings = f'{api_url}/current/driverStandings.json?limit=1000'
+        resp_standings = safe_get(url_standings)
+        standings_list = []
+        if resp_standings.status_code == 200:
+            standings_list = resp_standings.json()["MRData"]["StandingsTable"]["StandingsLists"][0]["DriverStandings"]
+
+    drivers_data = {}
+
+    for race in races:
         raceName = race["raceName"]
         season = race["season"]
         round = race["round"]
         results = race["Results"]
-        drivers_done = 0
+
+        quali_race = next((r for r in quali_races if r["round"] == round), None)
+
+        def get_driver_id(driver_obj):
+            driver_id = driver_obj.get("driverId")
+            if not driver_id:
+                code = driver_obj.get("code", "")
+                if code == "VER": return "max_verstappen"
+                elif code == "LIN": return "arvid_lindblad"
+                elif code == "BEA": return "bearman"
+                elif code == "ANT": return "antonelli"
+                elif code == "BOR": return "bortoleto"
+                elif code == "HAD": return "hadjar"
+                elif code == "COL": return "colapinto"
+                elif code == "LAW": return "lawson"
+                elif code == "PER": return "perez"
+                elif code == "HUL": return "hulkenberg"
+                else: return driver_obj.get("familyName", "").lower().replace(' ', '_')
+            return driver_id
 
         for result in results:
-            driverId = result["Driver"]["driverId"]
-            input_file = os.path.join(input_directory, f'{driverId}.json')
-            output_file = os.path.join(output_directory, f'{driverId}.json')
+            driver_obj = result.get("Driver", {})
+            driverId = get_driver_id(driver_obj)
 
-            # Load driver data from the input file or create a new default structure if it doesn't exist
-            if os.path.exists(input_file):
-                with open(input_file, 'r', encoding='utf-8') as file:
-                    data = json.load(file)
-            else:
-                # Create a new file structure with default (empty) values
-                data = {
-                    "driverId": driverId,
-                    "driverCode": result["Driver"].get("code", ""),
-                    "driverNumber": result["Driver"].get("permanentNumber", ""),
-                    "lastUpdate": "",
-                    "totalWins": 0,
-                    "totalPodiums": 0,
-                    "totalPoles": 0,
-                    "totalDNFs": 0,
-                    "seasonWins": {},
-                    "seasonPodiums": {},
-                    "seasonPoles": {},
-                    "seasonDNFs": {},
-                    "poles": {},
-                    "podiums": {},
-                    "DNFs": {},
-                    "fastLaps": {},
-                    "finalStandings": {},
-                    "posAfterRace": {},
-                    "racePosition": {},
-                    "qualiPosition": {},
-                    "driverQualifyingTimes": {},
-                    "consistency": {},
-                    "peakSeason": {},
-                    "avgRacePositions": {},
-                    "avgQualiPositions": {},
-                    "rates": {},
-                    "winRate": 0.0,
-                    "podiumRate": 0.0,
-                    "poleRate": 0.0,
-                    "dnfRate": 0.0,
-                    "ptwConRate": {},
-                    "positionsGainLost": {}
-                }
 
-            # Update last update time
+            if driverId not in drivers_data:
+                input_file = os.path.join(input_directory, f'{driverId}.json')
+                if os.path.exists(input_file):
+                    with open(input_file, 'r', encoding='utf-8') as file:
+                        drivers_data[driverId] = json.load(file)
+                else:
+                    drivers_data[driverId] = {
+                        "driverId": driverId,
+                        "driverCode": result["Driver"].get("code", ""),
+                        "driverNumber": result["Driver"].get("permanentNumber", ""),
+                        "lastUpdate": "",
+                        "totalWins": 0,
+                        "totalPodiums": 0,
+                        "totalPoles": 0,
+                        "totalDNFs": 0,
+                        "seasonWins": {},
+                        "seasonPodiums": {},
+                        "seasonPoles": {},
+                        "seasonDNFs": {},
+                        "poles": {},
+                        "podiums": {},
+                        "DNFs": {},
+                        "fastLaps": {},
+                        "finalStandings": {},
+                        "posAfterRace": {},
+                        "racePosition": {},
+                        "qualiPosition": {},
+                        "driverQualifyingTimes": {},
+                        "consistency": {},
+                        "peakSeason": {},
+                        "avgRacePositions": {},
+                        "avgQualiPositions": {},
+                        "rates": {},
+                        "winRate": 0.0,
+                        "podiumRate": 0.0,
+                        "poleRate": 0.0,
+                        "dnfRate": 0.0,
+                        "ptwConRate": {},
+                        "positionsGainLost": {}
+                    }
+
+            data = drivers_data[driverId]
             data["lastUpdate"] = datetime.datetime.now().isoformat()
 
             # Ensure keys exist for the new season
-            if season not in data["seasonWins"]:
-                data["seasonWins"][season] = 0
-            if season not in data["seasonPodiums"]:
-                data["seasonPodiums"][season] = 0
-            if season not in data["seasonPoles"]:
-                data["seasonPoles"][season] = 0
-            if season not in data["seasonDNFs"]:
-                data["seasonDNFs"][season] = 0
-            if season not in data["fastLaps"]:
-                data["fastLaps"][season] = {}
-            if season not in data["DNFs"]:
-                data["DNFs"][season] = {}
-            if season not in data["podiums"]:
-                data["podiums"][season] = {}
-            if season not in data["racePosition"]:
-                data["racePosition"][season] = {"year": season, "positions": {}}
-            if season not in data["qualiPosition"]:
-                data["qualiPosition"][season] = {"year": season, "positions": {}}
-            if season not in data["driverQualifyingTimes"]:
-                data["driverQualifyingTimes"][season] = {"year": season, "QualiTimes": {}}
-            if season not in data["finalStandings"]:
-                data["finalStandings"][season] = {"year": season, "position": "0", "points": "0"}
-            if season not in data["posAfterRace"]:
-                data["posAfterRace"][season] = {"year": season, "pos": {}}
-            if season not in data["poles"]:
-                data["poles"][season] = []
+            if season not in data["seasonWins"]: data["seasonWins"][season] = 0
+            if season not in data["seasonPodiums"]: data["seasonPodiums"][season] = 0
+            if season not in data["seasonPoles"]: data["seasonPoles"][season] = 0
+            if season not in data["seasonDNFs"]: data["seasonDNFs"][season] = 0
+            if season not in data["fastLaps"]: data["fastLaps"][season] = {}
+            if season not in data["DNFs"]: data["DNFs"][season] = {}
+            if season not in data["podiums"]: data["podiums"][season] = {}
+            if season not in data["racePosition"]: data["racePosition"][season] = {"year": season, "positions": {}}
+            if season not in data["qualiPosition"]: data["qualiPosition"][season] = {"year": season, "positions": {}}
+            if season not in data["driverQualifyingTimes"]: data["driverQualifyingTimes"][season] = {"year": season, "QualiTimes": {}}
+            if season not in data["finalStandings"]: data["finalStandings"][season] = {"year": season, "position": "40", "points": "0"}
+            if season not in data["posAfterRace"]: data["posAfterRace"][season] = {"year": season, "pos": {}}
+            if season not in data["poles"]: data["poles"][season] = []
 
             # Update DNF, Podium, and Win Data
-            if not (result["status"] == "Finished" or '+' in result["status"]):
-                data["DNFs"][season][raceName] = result["status"]
-                data["seasonDNFs"][season] = len(data["DNFs"][season].keys())
-                data["totalDNFs"] = sum(data["seasonDNFs"].values())
+            if not (result.get("status", "Finished") == "Finished" or '+' in result.get("status", "Finished")):
+                data["DNFs"][season][raceName] = result.get("status", "Finished")
+            data["seasonDNFs"][season] = len(data["DNFs"][season].keys())
+            data["totalDNFs"] = sum(data["seasonDNFs"].values())
 
             if result["position"] in ["1", "2", "3"]:
                 data["podiums"][season][raceName] = result["position"]
-                data["seasonPodiums"][season] = len(data["podiums"][season].keys())
-                data["totalPodiums"] = sum(data["seasonPodiums"].values())
+            data["seasonPodiums"][season] = len(data["podiums"][season].keys())
+            data["totalPodiums"] = sum(data["seasonPodiums"].values())
 
             if "FastestLap" in result:
                 data["fastLaps"][season][raceName] = result["FastestLap"]["Time"]["time"]
@@ -184,55 +234,46 @@ def update_driverData():
 
             data["racePosition"][season]["positions"][raceName] = result["position"]
 
-            if result["position"] == "1":
-                data["seasonWins"][season] = list(data["racePosition"][season]["positions"].values()).count("1")
-                data["totalWins"] = sum(data["seasonWins"].values())
+            data["seasonWins"][season] = list(data["racePosition"][season]["positions"].values()).count("1")
+            data["totalWins"] = sum(data["seasonWins"].values())
 
-            data["qualiPosition"][season]["positions"][raceName] = result["grid"]
+            # Qualifying & Grid Fallback
+            qualifying = None
+            if quali_race:
+                qr_list = quali_race.get("QualifyingResults", [])
+                qualifying = next((q for q in qr_list if get_driver_id(q.get("Driver", {})) == driverId), None)
+            
+            grid_pos = result.get("grid")
+            if (grid_pos is None or grid_pos == "null" or grid_pos == "") and qualifying:
+                grid_pos = qualifying.get("position")
 
-            # Update driver standings
-            url2 = f'{api_url}/current/drivers/{driverId}/driverStandings.json'
-            response2 = requests.get(url2)
-            if response2.status_code == 200:
-                responsedata2 = response2.json()
-                driverStanding = responsedata2["MRData"]["StandingsTable"]["StandingsLists"][0]["DriverStandings"][0]
+            data["qualiPosition"][season]["positions"][raceName] = grid_pos
+
+            # Driver Standing
+            driverStanding = next((s for s in standings_list if get_driver_id(s.get("Driver", {})) == driverId), None)
+            if driverStanding:
                 data["finalStandings"][season]["position"] = driverStanding.get("position", "40")
                 data["finalStandings"][season]["points"] = driverStanding["points"]
                 data["posAfterRace"][season]["pos"][raceName] = {"points": int(driverStanding["points"])}
-            else:
-                print("url2", response2.status_code)
 
-            # Update qualifying results
-            url3 = f'{api_url}/current/drivers/{driverId}/qualifying.json'
-            response3 = requests.get(url3)
-            if response3.status_code == 200:
-                responsedata3 = response3.json()
-                qualifyings = responsedata3["MRData"]["RaceTable"]["Races"]
-                for qualifyingit in reversed(qualifyings):
-                    if qualifyingit["round"] == round:
-                        qualifying = qualifyingit["QualifyingResults"][0]
-                        if qualifying["position"] == "1":
-                            if raceName not in data["poles"][season]:
-                                data["poles"][season].append(raceName)
-                            data["seasonPoles"][season] = len(data["poles"][season])
-                            data["totalPoles"] = sum(data["seasonPoles"].values())
-                        val1 = qualifying.get("Q1", "N/A")
-                        val2 = qualifying.get("Q2", "N/A")
-                        val3 = qualifying.get("Q3", "N/A")
-                        data["driverQualifyingTimes"][season]["QualiTimes"][raceName] = [val1, val2, val3]
-                        break
-            else:
-                print("url3", response3.status_code)
+            # Process remaining Qualifying data
+            if qualifying:
+                if qualifying["position"] == "1":
+                    if raceName not in data["poles"][season]:
+                        data["poles"][season].append(raceName)
+                data["seasonPoles"][season] = len(data["poles"][season])
+                data["totalPoles"] = sum(data["seasonPoles"].values())
+                val1 = qualifying.get("Q1", "N/A")
+                val2 = qualifying.get("Q2", "N/A")
+                val3 = qualifying.get("Q3", "N/A")
+                data["driverQualifyingTimes"][season]["QualiTimes"][raceName] = [val1, val2, val3]
 
-            # Save updated data to output file
-            with open(output_file, "w", encoding='utf-8') as f:
-                json.dump(data, f, indent=4, ensure_ascii=False)
-
-            drivers_done += 1
-            print(drivers_done, output_file)
-            print("------------------------------")
-    else:
-        print(response1.status_code)
+    # Save all updated data
+    for driverId, data in drivers_data.items():
+        output_file = os.path.join(output_directory, f'{driverId}.json')
+        with open(output_file, "w", encoding='utf-8') as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+        print(f"Updated {output_file}")
 
     print("Driver Data updated successfully!")
 
@@ -266,7 +307,8 @@ def analyse_driverData():
                 if race in quali_positions[season]['positions']:
                     race_pos = race_positions[season]['positions'][race]
                     quali_pos = quali_positions[season]['positions'][race]
-                    positions_gained_lost[season][race] = int(quali_pos) - int(race_pos)
+                    if quali_pos is not None and race_pos is not None:
+                        positions_gained_lost[season][race] = int(quali_pos) - int(race_pos)
         return positions_gained_lost
 
     def average_positions_gained_lost(seasons, positions_gained_lost):
@@ -322,8 +364,8 @@ def analyse_driverData():
             peak_season_podiums, peak_podiums = find_peak_season(podiums_per_season, seasons)
             peak_season_poles, peak_poles = find_peak_season(poles_per_season, seasons)
 
-            race_positions_per_season = {season: [int(data['racePosition'][season]['positions'][race]) for race in data['racePosition'][season]['positions']] for season in seasons}
-            quali_positions_per_season = {season: [int(data['qualiPosition'][season]['positions'][race]) for race in data['qualiPosition'][season]['positions']] for season in seasons}
+            race_positions_per_season = {season: [int(data['racePosition'][season]['positions'][race]) for race in data['racePosition'][season]['positions'] if data['racePosition'][season]['positions'][race] is not None] for season in seasons}
+            quali_positions_per_season = {season: [int(data['qualiPosition'][season]['positions'][race]) for race in data['qualiPosition'][season]['positions'] if data['qualiPosition'][season]['positions'][race] is not None] for season in seasons}
             avg_race_positions = [np.mean(race_positions_per_season[season]) for season in seasons]
             avg_quali_positions = [np.mean(quali_positions_per_season[season]) for season in seasons]
 
@@ -499,7 +541,7 @@ class NpEncoder(json.JSONEncoder):
 
 def ensure_directory_exists(directory_path):
     """Create directory if it doesn't exist"""
-    if not os.path.exists(directory_path):
+    if directory_path and not os.path.exists(directory_path):
         os.makedirs(directory_path)
         print(f"Created directory: {directory_path}")
 
@@ -528,7 +570,7 @@ def update_races():
     races_by_mk_file = 'races/racesbyMK.json'
     ensure_file_exists(races_by_mk_file, {})
     
-    response = requests.get(f'https://api.openf1.org/v1/meetings?year={season}')
+    response = safe_get(f'https://api.openf1.org/v1/meetings?year={season}')
     if response.status_code == 200:
         responsedata = response.json()
         
@@ -756,7 +798,7 @@ def update_raceResults():
             max_retries = 5
             wait_time = 10
             for attempt in range(1, max_retries + 1):
-                response = requests.get(url)
+                response = safe_get(url)
                 if response.status_code == 200:
                     responsedata = response.json()
                     api_races = responsedata.get('MRData', {}).get('RaceTable', {}).get('Races', [])
@@ -776,6 +818,23 @@ def update_raceResults():
                 print(f"Exceeded max retries for {race['raceName']}, skipping.")
         else:
             break
+
+    # Patch missing grid positions from qualifying.json
+    try:
+        with open('qualifying.json', 'r', encoding='utf-8') as qf:
+            quali_races = json.load(qf)
+            for race in result:
+                qrace = next((qr for qr in quali_races if qr.get("round") == race.get("round")), None)
+                if qrace:
+                    for res in race.get("Results", []):
+                        if res.get("grid") is None or res.get("grid") == "" or str(res.get("grid")).lower() == "null":
+                            code = res.get("Driver", {}).get("code")
+                            if code:
+                                q_driver = next((q for q in qrace.get("QualifyingResults", []) if q.get("Driver", {}).get("code") == code), None)
+                                if q_driver and q_driver.get("position"):
+                                    res["grid"] = str(q_driver.get("position"))
+    except Exception as e:
+        print("Could not patch grid from qualifying:", e)
 
     write_compact_race_json(result, 'results.json', 'Results')
 
@@ -801,7 +860,7 @@ def update_qualifying():
             max_retries = 5
             wait_time = 10
             for attempt in range(1, max_retries + 1):
-                response = requests.get(url)
+                response = safe_get(url)
                 if response.status_code == 200:
                     responsedata = response.json()
                     api_races = responsedata.get('MRData', {}).get('RaceTable', {}).get('Races', [])
@@ -850,7 +909,7 @@ def update_sprintResults():
             max_retries = 5
             wait_time = 10
             for attempt in range(1, max_retries + 1):
-                response = requests.get(url)
+                response = safe_get(url)
                 if response.status_code == 200:
                     responsedata = response.json()
                     api_races = responsedata.get('MRData', {}).get('RaceTable', {}).get('Races', [])
@@ -902,7 +961,7 @@ def update_driverStandings():
                 max_retries = 5
                 wait_time = 10  # start with 10 second
                 for attempt in range(1, max_retries + 1):
-                    response = requests.get(url)
+                    response = safe_get(url)
                     if response.status_code == 200:
                         data = response.json()
                         mt = data.get('MRData', {}).get('StandingsTable', {}) \
@@ -963,7 +1022,7 @@ def update_constructorStandings():
                 max_retries = 5
                 wait_time = 10  # start with 10 second
                 for attempt in range(1, max_retries + 1):
-                    response = requests.get(url)
+                    response = safe_get(url)
                     if response.status_code == 200:
                         data = response.json()
                         standings_lists = (
@@ -1024,7 +1083,7 @@ def initialize_race_details():
 def fetch_race_calendar(season):
     """Fetch race calendar from API for given season, excluding Pre-Season Testing"""
     url = f'{api_url}/{season}.json'
-    response = requests.get(url)
+    response = safe_get(url)
     
     if response.status_code == 200:
         responsedata = response.json()
